@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "sensortypes.h": "c",
+        "icm20948.h": "c",
+        "icm20948selftest.h": "c",
+        "icm20948setup.h": "c",
+        "icm20948defs.h": "c",
+        "message.h": "c",
+        "sensorconfig.h": "c"
+    }
+}
