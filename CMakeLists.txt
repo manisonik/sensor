@@ -1,13 +1,14 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.24)
 
-set(sensor_VERSION 1.0.0)
+include("${CMAKE_SOURCE_DIR}/cmake/gcc-arm-none-eabi.cmake")
 
 # Core project settings
+set(sensor_VERSION 1.0.1)
 project(sensor
     VERSION ${sensor_VERSION}
     DESCRIPTION "Generic Sensor Library"
     HOMEPAGE_URL "https://github.com/manisonik/sensor"
-    LANGUAGES C
+    LANGUAGES C ASM
 )
 
 # Setup compiler settings
@@ -15,8 +16,8 @@ set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
-enable_testing()
-add_subdirectory(tests)
+# Core project settings
+message("Build type: " ${CMAKE_BUILD_TYPE})
 
 # if you haven't included it already
 # definitions of CMAKE_INSTALL_LIBDIR, CMAKE_INSTALL_INCLUDEDIR and others
@@ -29,50 +30,11 @@ else()
     message(STATUS "This project is a top-level one")
 endif()
 
-# create the shared library (DLL)
-add_library(${PROJECT_NAME}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/sensor.c
+# add source directory
+add_subdirectory(src)
 
-    # eMD SmartMotion Driver
-	${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Ak0991x/Ak0991x.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Icm20948/Icm20948Augmented.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Icm20948/Icm20948AuxCompassAkm.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Icm20948/Icm20948AuxTransport.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Icm20948/Icm20948DataBaseControl.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Icm20948/Icm20948DataBaseDriver.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Icm20948/Icm20948DataConverter.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Icm20948/Icm20948Dmp3Driver.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Icm20948/Icm20948LoadFirmware.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Icm20948/Icm20948MPUFifoControl.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Icm20948/Icm20948SelfTest.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Icm20948/Icm20948Setup.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Icm20948/Icm20948Transport.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Sensor.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/DynamicProtocol/DynProtocol.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/DynamicProtocol/DynProtocolTransportUart.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/EmbUtils/DataConverter.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/EmbUtils/ErrorHelper.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/EmbUtils/InvProtocol.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/EmbUtils/InvQueue.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/EmbUtils/InvScheduler.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/EmbUtils/Message.c
-	${INVN_EMD_SDK_PATH}/sources/Invn/EmbUtils/RingByteBuffer.c
-)
-
-target_include_directories(${PROJECT_NAME} PUBLIC
-    $<BUILD_INTERFACE:
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        # eMD SmartMotion Driver
-        ${INVN_EMD_SDK_PATH}/sources
-        ${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Ak0991x
-        ${INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Icm20948
-        ${INVN_EMD_SDK_PATH}/sources/Invn/Devices
-        ${INVN_EMD_SDK_PATH}/sources/Invn/DynamicProtocol
-        ${INVN_EMD_SDK_PATH}/sources/Invn/EmbUtils
-        ${INVN_EMD_SDK_PATH}/sources/Invn
-        >
-    $<INSTALL_INTERFACE:include/sensor>  # <prefix>/include/mylib    
-)
+# add tests directory
+add_subdirectory(tests)
 
 # note that it is not CMAKE_INSTALL_PREFIX we are checking here
 if(DEFINED CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -94,19 +56,33 @@ else()
     )
 endif()
 
-# without it public headers won't get installed
-set(public_headers
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/sensor.h
+target_include_directories(dshot PUBLIC
+        $<BUILD_INTERFACE:
+            # dshot
+			"${CMAKE_CURRENT_SOURCE_DIR}/include/dshot"
+            >
+        $<INSTALL_INTERFACE:"include/dshot">  # <prefix>/include/mylib
 )
 
-# note that ${public_headers} has to be in quotes
-set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER "${public_headers}")
+target_include_directories(icm20948 PUBLIC
+        $<BUILD_INTERFACE:
+            # icm20948
+			"${CMAKE_CURRENT_SOURCE_DIR}/include/icm20948"
 
-# set the debug post-fix
-set_target_properties(${PROJECT_NAME} PROPERTIES DEBUG_POSTFIX "d")
+            # eMD SmartMotion Driver
+            "$ENV{INVN_EMD_SDK_PATH}/sources"
+            "$ENV{INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Ak0991x"
+            "$ENV{INVN_EMD_SDK_PATH}/sources/Invn/Devices/Drivers/Icm20948"
+            "$ENV{INVN_EMD_SDK_PATH}/sources/Invn/Devices"
+            "$ENV{INVN_EMD_SDK_PATH}/sources/Invn/DynamicProtocol"
+            "$ENV{INVN_EMD_SDK_PATH}/sources/Invn/EmbUtils"
+            "$ENV{INVN_EMD_SDK_PATH}/sources/Invn"
+            >
+        $<INSTALL_INTERFACE:"include/icm20948">  # <prefix>/include/mylib
+)
 
 # install the target and create export-set
-install(TARGETS ${PROJECT_NAME}
+install(TARGETS dshot
     EXPORT "${PROJECT_NAME}Targets"
     # these get default values from GNUInstallDirs, no need to set them
     #RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} # bin
@@ -132,15 +108,16 @@ write_basic_package_version_file(
     VERSION "${version}"
     COMPATIBILITY AnyNewerVersion
 )
+
 # create config file
 configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/Config.cmake.in
     "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
     INSTALL_DESTINATION cmake
 )
+
 # install config files
 install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
     DESTINATION cmake
 )
-

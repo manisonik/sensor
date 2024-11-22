@@ -1,0 +1,8 @@
+Detecting compiler hash for triplet arm-none-eabi-mingw-static...
+Compiler found: C:/MSYS64/ucrt64/bin/arm-none-eabi-g++.exe
+All requested packages are currently installed.
+Total install time: 300 ns
+scpi provides CMake targets:
+
+find_package(scpi CONFIG REQUIRED)
+target_link_libraries(main PRIVATE manisonik::scpi)

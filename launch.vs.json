@@ -1,0 +1,43 @@
+{
+  "version": "0.2.1",
+  "configurations": [
+    {
+      "project": "CMakeLists.txt",
+      "projectTarget": "STM32F756.elf (tests\\STM32F756\\STM32F756.elf)",
+      "name": "Launch (tests\\STM32F756\\STM32F756.elf)",
+      "type": "cppdbg",
+      "request": "launch",
+      "cwd": "${workspaceRoot}",
+      "program": "${debugInfo.fullTargetPath}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "C:\\MSYS64\\ucrt64\\bin\\gdb-multiarch.exe",
+      "miDebuggerServerAddress": "localhost:3333",
+      "debugServerPath": "C:\\MSYS64\\ucrt64\\bin\\openocd.exe",
+      "debugServerArgs": "-f board/st_nucleo_f7.cfg -c \u0022$_TARGETNAME configure -rtos auto\u0022",
+      "serverStarted": "Listening on port .* for gdb connections",
+      "filterStderr": true,
+      "stopAtConnect": false,
+      "hardwareBreakpoints": {
+        "require": true,
+        "limit": 6
+      },
+      "postRemoteConnectCommands": [
+        {
+          "text": "-target-download",
+          "ignoreFailures": false
+        },
+        {
+          "text": "-interpreter-exec console \u0022monitor reset halt\u0022",
+          "ignoreFailures": false
+        }
+      ],
+      "svdPath": "${workspaceRoot}/STM32F756.svd"
+    },
+    {
+      "type": "default",
+      "project": "CMakeLists.txt",
+      "projectTarget": "STM32F756.elf (tests\\STM32F756\\STM32F756.elf)",
+      "name": "STM32F756.elf (tests\\STM32F756\\STM32F756.elf)"
+    }
+  ]
+}

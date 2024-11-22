@@ -5,7 +5,7 @@
  *      Author: hooke
  */
 
-#include "sensor.h"
+#include "sensor_icm20948.h"
 #include "Icm20948.h"
 #include "Icm20948MPUFifoControl.h"
 #include "Icm20948Defs.h"
@@ -295,7 +295,7 @@ int hal_write_reg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t
 	return retVal;
 }*/
 
-void initICM20948(read_reg_t read_fn, write_reg_t write_fn) {
+void initICM20948(inv_invpres_t* s) {
 	int rc;
 
 	/*
@@ -303,8 +303,8 @@ void initICM20948(read_reg_t read_fn, write_reg_t write_fn) {
 	 */
 	struct inv_icm20948_serif icm20948_serif;
 	icm20948_serif.context = 0; /* no need */
-	icm20948_serif.read_reg  = read_fn;
-	icm20948_serif.write_reg = write_fn;
+	icm20948_serif.read_reg  = s->serif_read_reg;
+	icm20948_serif.write_reg = s->serif_write_reg;
 	icm20948_serif.max_read = 1024 * 16; /* maximum number of bytes allowed per serial read */
 	icm20948_serif.max_write = 1024 * 16; /* maximum number of bytes allowed per serial write */
 	icm20948_serif.is_spi = false;
