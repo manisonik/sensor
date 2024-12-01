@@ -58,6 +58,8 @@ add_library(${icm20948_NAME}
 	"$ENV{INVN_EMD_SDK_PATH}/sources/Invn/EmbUtils/RingByteBuffer.c"
 )
 
+target_compile_definitions(${icm20948_NAME} PRIVATE INV_MSG_ENABLE=INV_MSG_LEVEL_DEBUG)
+
 target_include_directories(${icm20948_NAME} PRIVATE
 	"${PROJECT_SOURCE_DIR}/include/icm20948"
 )

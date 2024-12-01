@@ -8,13 +8,14 @@ add_executable(${stm32F756_ProjectName}
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/dma.c"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/eth.c"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/freertos.c"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/device_protocol.c"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/gpio.c"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/i2c.c"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/main.c"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/stm32f7xx_hal_msp.c"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/stm32f7xx_hal_timebase_tim.c"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/stm32f7xx_it.c"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/syscalls.c"
+	#"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/syscalls.c" # exclude for semihosting
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/sysmem.c"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/system_stm32f7xx.c"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/tim.c"
@@ -125,11 +126,18 @@ target_include_directories(${stm32F756_ProjectName} PRIVATE
 )
 
 # Target compiler definitions
-target_compile_definitions(${stm32F756_ProjectName} PUBLIC STM32F756xx)
+target_compile_definitions(${stm32F756_ProjectName} PRIVATE STM32F756xx)
 
 # Add linked libraries
-#find_package(scpi CONFIG REQUIRED)
-#target_link_libraries(${stm32F756_ProjectName} PRIVATE manisonik::scpi)
+find_package(scpi CONFIG REQUIRED)
+target_link_libraries(${stm32F756_ProjectName} PRIVATE manisonik::scpi)
+
+find_package(fusion CONFIG REQUIRED)
+target_link_libraries(${stm32F756_ProjectName} PRIVATE xioTechnologies::fusion)
+
+target_link_libraries(${stm32F756_ProjectName} PRIVATE icm20948)
+target_link_libraries(${stm32F756_ProjectName} PRIVATE dshot)
+target_link_libraries(${stm32F756_ProjectName} PRIVATE icp10101)
 
 # Compiler options
 target_compile_options(${stm32F756_ProjectName} PRIVATE
@@ -167,7 +175,8 @@ target_link_options(${stm32F756_ProjectName} PRIVATE
     ${cpu_PARAMS}
     -Wl,-Map=${CMAKE_PROJECT_NAME}.map
     -u _printf_float # STDIO float formatting support (remove if not used)
-    --specs=nosys.specs
+    #--specs=nosys.specs
+	--specs=rdimon.specs -lc -lrdimon
     -Wl,--start-group
     -lc
     -lm
@@ -176,6 +185,7 @@ target_link_options(${stm32F756_ProjectName} PRIVATE
     -Wl,--end-group
     -Wl,-z,max-page-size=8 # Allow good software remapping across address space (with proper GCC section making)
     -Wl,--print-memory-usage
+	-Wmissing-braces
 )
 
 # Execute post-build to print size, generate hex and bin

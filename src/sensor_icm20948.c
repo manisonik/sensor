@@ -9,16 +9,16 @@
 #include "Icm20948.h"
 #include "Icm20948MPUFifoControl.h"
 #include "Icm20948Defs.h"
+#include "ErrorHelper.h"
 #include "Message.h"
 #include "Ak0991x.h"
 #include "SensorTypes.h"
 #include "SensorConfig.h"
 
 inv_icm20948_t icm_device;
-
+inv_invpres_t* icm;
 static const uint8_t EXPECTED_WHOAMI[] = { 0xEA }; /* WHOAMI value for ICM20948 or derivative */
 static int unscaled_bias[THREE_AXES * 2];
-
 static const uint8_t dmp3_image[] =
 { "icm20948_img.dmp3a.h" };
 
@@ -26,34 +26,15 @@ static const uint8_t dmp3_image[] =
 int32_t cfg_acc_fsr = 4; // Default = +/- 4g. Valid ranges: 2, 4, 8, 16
 int32_t cfg_gyr_fsr = 2000; // Default = +/- 2000dps. Valid ranges: 250, 500, 1000, 2000
 
-/*
-* Printer function for message facility
-*/
-static void msg_printer(int level, const char * str, va_list ap) {
-	static char out_str[256]; /* static to limit stack usage */
-	unsigned idx = 0;
-	const char * ptr = out_str;
-	const char * s[INV_MSG_LEVEL_MAX] = {
-		"",    // INV_MSG_LEVEL_OFF
-		"[E] ", // INV_MSG_LEVEL_ERROR
-		"[W] ", // INV_MSG_LEVEL_WARNING
-		"[I] ", // INV_MSG_LEVEL_INFO
-		"[V] ", // INV_MSG_LEVEL_VERBOSE
-		"[D] ", // INV_MSG_LEVEL_DEBUG
-	};
-	idx += snprintf(&out_str[idx], sizeof(out_str) - idx, "%s", s[level]);
-	if(idx >= (sizeof(out_str)))
-		return;
-	idx += vsnprintf(&out_str[idx], sizeof(out_str) - idx, str, ap);
-	if(idx >= (sizeof(out_str)))
-		return;
-	idx += snprintf(&out_str[idx], sizeof(out_str) - idx, "\r\n");
-	if(idx >= (sizeof(out_str)))
-		return;
+int icm20948_run_selftest(void);
 
-	while(*ptr != '\0') {
-		//usart_serial_putchar(DEBUG_UART, *ptr);
-		++ptr;
+/*
+* Helper function to check RC value and block program execution
+*/
+void check_rc(int rc, const char * msg_context){
+	if(rc < 0) {
+		INV_MSG(INV_MSG_LEVEL_ERROR, "%s: error %d (%s)", msg_context, rc, inv_error_str(rc));
+		while(1);
 	}
 }
 
@@ -92,11 +73,15 @@ static void icm20948_set_fsr(void) {
 }
 
 void inv_icm20948_sleep(int ms) {
-	//HAL_Delay(ms);
+	if (icm->init.delay_ms!= NULL) {
+		icm->init.delay_ms(ms);
+	}
 }
 
 void inv_icm20948_sleep_us(int us) {
-	//HAL_Delay(us/1000);
+	if (icm->init.delay_us != NULL) {
+		icm->init.delay_us(us);
+	}
 }
 
 int load_dmp3(void) {
@@ -131,7 +116,7 @@ int icm20948_sensor_setup(void) {
 
 	if (i == sizeof(EXPECTED_WHOAMI) / sizeof(EXPECTED_WHOAMI[0]))
 	{
-		//msg_printer(INV_MSG_LEVEL_ERROR, "Bad WHOAMI value. Got 0x%02x.", whoami);
+		INV_MSG(INV_MSG_LEVEL_ERROR, "Bad WHOAMI value. Got 0x%02x.", whoami);
 		return rc;
 	}
 
@@ -139,26 +124,27 @@ int icm20948_sensor_setup(void) {
 	inv_icm20948_init_matrix(&icm_device);
 
 	/* set default power mode */
-	//INV_MSG(INV_MSG_LEVEL_VERBOSE, "Putting Icm20948 in sleep mode...");
+	INV_MSG(INV_MSG_LEVEL_VERBOSE, "Putting Icm20948 in sleep mode...");
 	rc = inv_icm20948_initialize(&icm_device, dmp3_image, sizeof(dmp3_image));
 	if (rc != 0)
 	{
-		//msg_printer(INV_MSG_LEVEL_ERROR, "Initialization failed. Error loading DMP3...");
+		INV_MSG(INV_MSG_LEVEL_ERROR, "Initialization failed. Error loading DMP3...");
 		return rc;
 	}
 
 	/*
 	 * Configure and initialize the ICM20948 for normal use
 	 */
-	//msg_printer(INV_MSG_LEVEL_INFO, "Booting up icm20948...");
+	INV_MSG(INV_MSG_LEVEL_INFO, "Booting up icm20948...");
 
 	/* Initialize auxiliary sensors */
-	inv_icm20948_register_aux_compass(&icm_device, INV_ICM20948_COMPASS_ID_AK09916, (uint8_t)AK0991x_DEFAULT_I2C_ADDR);
+	inv_icm20948_register_aux_compass(&icm_device, INV_ICM20948_COMPASS_ID_AK09916, AK0991x_DEFAULT_I2C_ADDR);
 	rc = inv_icm20948_initialize_auxiliary(&icm_device);
-	if (rc == -1)
-	{
-		//msg_printer(INV_MSG_LEVEL_ERROR, "Compass not detected...");
+	if (rc == -1) {
+		INV_MSG(INV_MSG_LEVEL_ERROR, "Compass not detected...");
 	}
+
+	INV_MSG(INV_MSG_LEVEL_ERROR, "Compass detected and initialized.");
 
 	icm20948_apply_mounting_matrix();
 	icm20948_set_fsr();
@@ -167,9 +153,12 @@ int icm20948_sensor_setup(void) {
 	inv_icm20948_init_structure(&icm_device);
 
 	/* we should be good to go ! */
-	//msg_printer(INV_MSG_LEVEL_VERBOSE, "We're good to go !");
+	INV_MSG(INV_MSG_LEVEL_VERBOSE, "ICM20948 initialized.");
 
-	return 0;
+	/* running self-test */
+	icm20948_run_selftest();
+
+	return rc;
 }
 
 void inv_icm20948_get_st_bias(struct inv_icm20948 * s, int *gyro_bias, int *accel_bias, int * st_bias, int * unscaled) {
@@ -238,14 +227,14 @@ int icm20948_run_selftest(void) {
 	static int raw_bias[THREE_AXES * 2];
 
 	if (icm_device.selftest_done == 1) {
-		//msg_printer(INV_MSG_LEVEL_INFO, "Self-test has already run. Skipping.");
+		INV_MSG(INV_MSG_LEVEL_INFO, "Self-test has already run. Skipping.");
 	}
 	else {
 		/*
 		* Perform self-test
 		* For ICM20948 self-test is performed for both RAW_ACC/RAW_GYR
 		*/
-		//msg_printer(INV_MSG_LEVEL_INFO, "Running self-test...");
+		INV_MSG(INV_MSG_LEVEL_INFO, "Running self-test...");
 
 		/* Run the self-test */
 		rc = inv_icm20948_run_selftest(&icm_device, gyro_bias_regular, accel_bias_regular);
@@ -256,7 +245,7 @@ int icm20948_run_selftest(void) {
 			rc = 0;
 		} else {
 			/* On A|G|M self-test failure, return Error */
-			//msg_printer(INV_MSG_LEVEL_ERROR, "Self-test failure !");
+			INV_MSG(INV_MSG_LEVEL_ERROR, "Self-test failure !");
 			/* 0 would be considered OK, we want KO */
 			rc = INV_ERROR;
 		}
@@ -264,50 +253,34 @@ int icm20948_run_selftest(void) {
 		/* It's advised to re-init the icm20948 device after self-test for normal use */
 		icm20948_sensor_setup();
 		inv_icm20948_get_st_bias(&icm_device, gyro_bias_regular, accel_bias_regular, raw_bias, unscaled_bias);
-		//msg_printer(INV_MSG_LEVEL_INFO, "GYR bias (FS=250dps) (dps): x=%f, y=%f, z=%f", (float)(raw_bias[0] / (float)(1 << 16)), (float)(raw_bias[1] / (float)(1 << 16)), (float)(raw_bias[2] / (float)(1 << 16)));
-		//msg_printer(INV_MSG_LEVEL_INFO, "ACC bias (FS=2g) (g): x=%f, y=%f, z=%f", (float)(raw_bias[0 + 3] / (float)(1 << 16)), (float)(raw_bias[1 + 3] / (float)(1 << 16)), (float)(raw_bias[2 + 3] / (float)(1 << 16)));
+		INV_MSG(INV_MSG_LEVEL_INFO, "GYR bias (FS=250dps) (dps): x=%f, y=%f, z=%f", (float)(raw_bias[0] / (float)(1 << 16)), (float)(raw_bias[1] / (float)(1 << 16)), (float)(raw_bias[2] / (float)(1 << 16)));
+		INV_MSG(INV_MSG_LEVEL_INFO, "ACC bias (FS=2g) (g): x=%f, y=%f, z=%f", (float)(raw_bias[0 + 3] / (float)(1 << 16)), (float)(raw_bias[1 + 3] / (float)(1 << 16)), (float)(raw_bias[2 + 3] / (float)(1 << 16)));
 	}
 
 	return rc;
 }
 
-/*int hal_read_reg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen){
-	(void)context;
-
-	HAL_I2C_Master_Transmit(&hi2c2, ICM_I2C_ADDR_REVB << 1, &reg, 1, 0xff);
-
-	HAL_StatusTypeDef retVal = HAL_I2C_Master_Receive(&hi2c2, ICM_I2C_ADDR_REVB << 1, rbuffer, rlen, 2000);
-
-	return retVal;
-}
-
-int hal_write_reg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen){
-	(void)context;
-
-	uint8_t data[wlen + 1];
-	data[0] = reg;
-	for (int i = 0; i < wlen; i++) {
-		data[i + 1] = wbuffer[i];
-	}
-
-	HAL_StatusTypeDef retVal = HAL_I2C_Master_Transmit(&hi2c2, ICM_I2C_ADDR_REVB << 1, data, wlen + 1, 2000);
-
-	return retVal;
-}*/
-
 void initICM20948(inv_invpres_t* s) {
 	int rc;
+
+	// Store
+	icm = s;
+
+	/*
+	* Setup message server
+	*/
+	INV_MSG_SETUP(INV_MSG_ENABLE, s->init.log);
 
 	/*
 	 * Initialize icm20948 serif structure
 	 */
 	struct inv_icm20948_serif icm20948_serif;
-	icm20948_serif.context = 0; /* no need */
-	icm20948_serif.read_reg  = s->serif_read_reg;
-	icm20948_serif.write_reg = s->serif_write_reg;
+	icm20948_serif.context = s->init.context;
+	icm20948_serif.read_reg  = s->init.read_callback;
+	icm20948_serif.write_reg = s->init.write_callback;
 	icm20948_serif.max_read = 1024 * 16; /* maximum number of bytes allowed per serial read */
 	icm20948_serif.max_write = 1024 * 16; /* maximum number of bytes allowed per serial write */
-	icm20948_serif.is_spi = false;
+	icm20948_serif.is_spi = s->init.is_spi;
 
 	/*
 	 * Reset icm20948 driver states
@@ -325,5 +298,5 @@ void initICM20948(inv_invpres_t* s) {
 	 * This step is mandatory as DMP image are not store in non volatile memory
 	 */
 	rc += load_dmp3();
-	//check_rc(rc, "Error sensor_setup/DMP loading.");
+	check_rc(rc, "Error sensor_setup/DMP loading.");
 }

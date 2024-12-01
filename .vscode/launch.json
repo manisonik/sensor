@@ -24,6 +24,41 @@
             },
             "preLaunchTask": "Build",
             "svdPath": "${command:vscode-embedded.set.svd}/STM32U5xx.svd"
-        }
+        },
+        {
+            "name": "Launch OpenOCD Debugger",
+            "type": "cppdbg",
+            "request": "launch",
+            "cwd": "${workspaceRoot}",
+            "program": "${command:cmake.launchTargetPath}",
+            "MIMode": "gdb",
+            "miDebuggerPath": "gdb-multiarch.exe",
+            "miDebuggerServerAddress": "localhost:3333",
+            "debugServerPath": "openocd.exe",
+            "debugServerArgs": "-f board/st_nucleo_f7.cfg -c \u0022$_TARGETNAME configure -rtos FreeRTOS\u0022",
+            "serverStarted": "Listening on port .* for gdb connections",
+            "filterStderr": true,
+            "stopAtConnect": false,
+            "externalConsole": true,
+            "hardwareBreakpoints": {
+              "require": true,
+              "limit": 6
+            },
+            "postRemoteConnectCommands": [
+              {
+                "text": "-target-download",
+                "ignoreFailures": false
+              },
+              {
+                "text": "-interpreter-exec console \u0022monitor reset halt\u0022",
+                "ignoreFailures": false
+              },
+              {
+                "text": "-interpreter-exec console \u0022monitor arm semihosting enable\u0022",
+                "ignoreFailures": false
+              }
+            ],
+            "svdPath": "${workspaceRoot}/STM32F756.svd"
+          }
     ]
 }

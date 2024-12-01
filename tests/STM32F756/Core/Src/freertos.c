@@ -25,23 +25,14 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-//#include "scpi/scpi.h"
-#include "usbd_cdc_if.h"
+#include "device_protocol.h"
+#include "tim.h"
 #include "i2c.h"
-
-/* InvenSense drivers and utils */
-//#include "Icm20948.h"
-//#include "Ak0991x.h"
-//#include "SensorTypes.h"
-//#include "SensorConfig.h"
-//#include "InvScheduler.h"
-//#include "RingByteBuffer.h"
-//#include "Message.h"
-//#include "ErrorHelper.h"
-//#include "DataConverter.h"
-//#include "RingBuffer.h"
-//#include "DynProtocol.h"
-//#include "DynProtocolTransportUart.h"
+#include "sensor_icm20948.h"
+//#include "sensor_icp10101.h"
+#include "protocol_dshot.h"
+#include "Fusion/Fusion.h"
+#include <time.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,31 +42,15 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define SAMPLE_RATE (100) // replace this with actual sample rate
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define SCPI_INPUT_BUFFER_LENGTH 256
-#define SCPI_ERROR_QUEUE_SIZE 17
-#define SCPI_IDN1 "Manisonik"
-#define SCPI_IDN2 "INSTR2023"
-#define SCPI_IDN3 NULL
-#define SCPI_IDN4 "01-02"
-#define SCPI_COMMAND_LENGTH 6
-#define AK0991x_DEFAULT_I2C_ADDR	0x0C	/* The default I2C address for AK0991x Magnetometers */
-#define AK0991x_SECONDARY_I2C_ADDR  0x0E	/* The secondary I2C address for AK0991x Magnetometers */
-#define ICM_I2C_ADDR_REVA			0x68 	/* I2C slave address for INV device on Rev A board */
-#define ICM_I2C_ADDR_REVB			0x69 	/* I2C slave address for INV device on Rev B board */
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-//char scpi_input_buffer[SCPI_INPUT_BUFFER_LENGTH];
-//scpi_error_t scpi_error_queue_data[SCPI_ERROR_QUEUE_SIZE];
-//scpi_t scpi_context;
-//bool allMotorsOn = FALSE;
-//inv_icm20948_t icm_device;
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
@@ -94,33 +69,9 @@ const osThreadAttr_t cmdTask_attributes = {
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
-/*size_t SCPI_Write(scpi_t* context, const char* data, size_t len);
-int SCPI_Error(scpi_t *context, int_fast16_t err);
-scpi_result_t SCPI_Control(scpi_t *context, scpi_ctrl_name_t ctrl, scpi_reg_val_t val);
-scpi_result_t SCPI_Reset(scpi_t *context);
-scpi_result_t SCPI_Flush(scpi_t *context);
-scpi_result_t SCPI_IdnQ(scpi_t *context);
-scpi_result_t SCPI_Rst(scpi_t *context);
-scpi_result_t SCPI_Motor_All_On(scpi_t *context);
-scpi_result_t SCPI_Motor_All_Off(scpi_t *context);
-
-scpi_command_t scpi_commands[] =
-{
-	{ .pattern = "*IDN?", .callback = SCPI_IdnQ, },
-	{ .pattern = "*RST", .callback = SCPI_Rst, },
-	{ .pattern = "MOTOR:ALL:ON", .callback = SCPI_Motor_All_On },
-	{ .pattern = "MOTOR:ALL:OFF", .callback = SCPI_Motor_All_Off },
-	SCPI_CMD_LIST_END
-};
-
-scpi_interface_t scpi_interface =
-{
-		.error = SCPI_Error,
-		.write = SCPI_Write,
-		.control = SCPI_Control,
-		.flush = SCPI_Flush,
-		.reset = SCPI_Reset
-};*/
+static void log_message(int level, const char * str, va_list ap);
+int i2c_read(void* context, uint8_t reg, uint8_t* rbuffer, uint32_t rlen);
+int i2c_write(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen);
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);
@@ -136,14 +87,6 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
   */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
-  /*SCPI_Init(&scpi_context,
-			scpi_commands,
-			&scpi_interface,
-			scpi_units_def,
-			SCPI_IDN1, SCPI_IDN2, SCPI_IDN3, SCPI_IDN4,
-			scpi_input_buffer, SCPI_INPUT_BUFFER_LENGTH,
-			scpi_error_queue_data, SCPI_ERROR_QUEUE_SIZE
-			);*/
   /* USER CODE END Init */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -209,22 +152,78 @@ void StartDefaultTask(void *argument)
 void StartCmdTask(void *argument)
 {
   /* USER CODE BEGIN StartCmdTask */
+  inv_invpres_t s;
+  s.init.context = 0; /* no need */
+  s.init.read_callback  = i2c_read;
+  s.init.write_callback = i2c_write;
+  s.init.delay_ms = delay_ms;
+  s.init.delay_us = delay_us;
+  s.init.log = log_message;
+  s.init.is_spi = false;
+  initICM20948(&s);
+
+  // Define calibration
+  const FusionMatrix gyroscopeMisalignment = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+  const FusionVector gyroscopeSensitivity = {1.0f, 1.0f, 1.0f};
+  const FusionVector gyroscopeOffset = {0.0f, 0.0f, 0.0f}; // same as bias
+  const FusionMatrix accelerometerMisalignment = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+  const FusionVector accelerometerSensitivity = {1.0f, 1.0f, 1.0f};
+  const FusionVector accelerometerOffset = {0.0f, 0.0f, 0.0f}; // same as bias
+  const FusionMatrix softIronMatrix = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+  const FusionVector hardIronOffset = {0.0f, 0.0f, 0.0f};
+
+  // Initialise algorithms
+  FusionOffset offset;
+  FusionAhrs ahrs;
+  
+  FusionOffsetInitialise(&offset, SAMPLE_RATE);
+  FusionAhrsInitialise(&ahrs);
+
+  // Set AHRS algorithm settings
+  const FusionAhrsSettings settings = {
+          .convention = FusionConventionNwu,
+          .gain = 0.5f,
+          .gyroscopeRange = 2000.0f, /* replace this with actual gyroscope range in degrees/s */
+          .accelerationRejection = 10.0f,
+          .magneticRejection = 10.0f,
+          .recoveryTriggerPeriod = 5 * SAMPLE_RATE, /* 5 seconds */
+  };
+
+  FusionAhrsSetSettings(&ahrs, &settings);
+
   /* Infinite loop */
   for(;;)
   {
-    /*uint8_t rxData[8];
-		memset(rxData, 0, 8);
+    // Acquire latest sensor data
+    const clock_t timestamp = clock(); // replace this with actual gyroscope timestamp
+    FusionVector gyroscope = {0.0f, 0.0f, 0.0f}; // replace this with actual gyroscope data in degrees/s
+    FusionVector accelerometer = {0.0f, 0.0f, 1.0f}; // replace this with actual accelerometer data in g
+    FusionVector magnetometer = {1.0f, 0.0f, 0.0f}; // replace this with actual magnetometer data in arbitrary units
+    
+    // Apply calibration
+    gyroscope = FusionCalibrationInertial(gyroscope, gyroscopeMisalignment, gyroscopeSensitivity, gyroscopeOffset);
+    accelerometer = FusionCalibrationInertial(accelerometer, accelerometerMisalignment, accelerometerSensitivity, accelerometerOffset);
+    magnetometer = FusionCalibrationMagnetic(magnetometer, softIronMatrix, hardIronOffset);
+    
+    // Update gyroscope offset correction algorithm
+    gyroscope = FusionOffsetUpdate(&offset, gyroscope);
 
-    uint16_t bytesAvailable = CDC_GetRxBufferBytesAvailable_FS();
-    if (bytesAvailable > 0)
-    {
-      uint16_t bytesToRead = bytesAvailable >= 8 ? 8 : bytesAvailable;
-      if (CDC_ReadRxBuffer_FS(rxData, bytesToRead)
-          == USB_CDC_RX_BUFFER_OK)
-      {
-        SCPI_Input(&scpi_context, (const char*)rxData, bytesToRead);
-      }
-    }*/
+    // Calculate delta time (in seconds) to account for gyroscope sample clock error
+    static clock_t previousTimestamp;
+    const float deltaTime = (float) (timestamp - previousTimestamp) / (float) CLOCKS_PER_SEC;
+    previousTimestamp = timestamp;
+
+    // Update gyroscope AHRS algorithm
+    FusionAhrsUpdate(&ahrs, gyroscope, accelerometer, magnetometer, deltaTime);
+
+    // Print algorithm outputs
+    const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
+    const FusionVector earth = FusionAhrsGetEarthAcceleration(&ahrs);
+
+    printf("Roll %0.1f, Pitch %0.1f, Yaw %0.1f, X %0.1f, Y %0.1f, Z %0.1f\n",
+               euler.angle.roll, euler.angle.pitch, euler.angle.yaw,
+               earth.axis.x, earth.axis.y, earth.axis.z);
+
     osDelay(1);
   }
   /* USER CODE END StartCmdTask */
@@ -232,7 +231,14 @@ void StartCmdTask(void *argument)
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
-/*int idd_io_hal_read_reg(void* context, uint8_t reg, uint8_t* rbuffer, uint32_t rlen) {
+
+/// @brief 
+/// @param context 
+/// @param reg 
+/// @param rbuffer 
+/// @param rlen 
+/// @return 
+int i2c_read(void* context, uint8_t reg, uint8_t* rbuffer, uint32_t rlen) {
 	(void)context;
 
 	HAL_I2C_Master_Transmit(&hi2c2, ICM_I2C_ADDR_REVB << 1, &reg, 1, 0xff);
@@ -240,12 +246,18 @@ void StartCmdTask(void *argument)
 	return retVal;
 }
 
-int idd_io_hal_write_reg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen){
+/// @brief 
+/// @param context 
+/// @param reg 
+/// @param wbuffer 
+/// @param wlen 
+/// @return 
+int i2c_write(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen) {
 	(void)context;
 
   uint8_t data[wlen + 1];
 	data[0] = reg;
-	for (int i = 0; i < wlen; i++) {
+	for (uint32_t i = 0; i < wlen; i++) {
 		data[i + 1] = wbuffer[i];
 	}
 
@@ -253,71 +265,34 @@ int idd_io_hal_write_reg(void * context, uint8_t reg, const uint8_t * wbuffer, u
 	return retVal;
 }
 
-scpi_result_t SCPI_Motor_All_On(scpi_t *context)
-{
-	(void) context;
-	allMotorsOn = TRUE;
-	return SCPI_RES_OK;
+/// @brief Printer function for message facility
+/// @param level 
+/// @param str 
+/// @param ap 
+static void log_message(int level, const char * str, va_list ap) {
+	static char out_str[256]; /* static to limit stack usage */
+	unsigned idx = 0;
+	const char * ptr = out_str;
+	const char * s[6] = {
+		"",    // INV_MSG_LEVEL_OFF
+		"[E] ", // INV_MSG_LEVEL_ERROR
+		"[W] ", // INV_MSG_LEVEL_WARNING
+		"[I] ", // INV_MSG_LEVEL_INFO
+		"[V] ", // INV_MSG_LEVEL_VERBOSE
+		"[D] ", // INV_MSG_LEVEL_DEBUG
+	};
+
+	idx += snprintf(&out_str[idx], sizeof(out_str) - idx, "%s", s[level]);
+	if(idx >= (sizeof(out_str)))
+		return;
+	idx += vsnprintf(&out_str[idx], sizeof(out_str) - idx, str, ap);
+	if(idx >= (sizeof(out_str)))
+		return;
+	idx += snprintf(&out_str[idx], sizeof(out_str) - idx, "\r\n");
+	if(idx >= (sizeof(out_str)))
+		return;
+
+	printf(ptr);
 }
-
-scpi_result_t SCPI_Motor_All_Off(scpi_t *context)
-{
-	(void) context;
-	allMotorsOn = FALSE;
-	return SCPI_RES_OK;
-}
-
-scpi_result_t SCPI_IdnQ(scpi_t *context)
-{
-	(void) context;
-
-	return SCPI_RES_OK;
-}
-
-scpi_result_t SCPI_Rst(scpi_t *context)
-{
-	(void) context;
-
-	return SCPI_RES_OK;
-}
-
-size_t SCPI_Write(scpi_t *context, const char *data, size_t len)
-{
-	(void) context;
-
-	return 0;
-}
-
-scpi_result_t SCPI_Flush(scpi_t *context)
-{
-	(void) context;
-
-	const char txData[] = "\n";
-	while (CDC_Transmit_FS((uint8_t*)txData, strlen(txData)) == USBD_BUSY);
-
-	return SCPI_RES_OK;
-}
-
-int SCPI_Error(scpi_t *context, int_fast16_t err)
-{
-	(void) context;
-
-	return 0;
-}
-
-scpi_result_t SCPI_Control(scpi_t *context, scpi_ctrl_name_t ctrl,
-		scpi_reg_val_t val)
-{
-	(void) context;
-
-	return SCPI_RES_OK;
-}
-
-scpi_result_t SCPI_Reset(scpi_t *context)
-{
-	(void) context;
-
-	return SCPI_RES_OK;
-}*/
 /* USER CODE END Application */
 

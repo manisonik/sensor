@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
+# Toolchain
 include("${CMAKE_SOURCE_DIR}/cmake/gcc-arm-none-eabi.cmake")
 
 # Core project settings
@@ -62,6 +63,14 @@ target_include_directories(dshot PUBLIC
 			"${CMAKE_CURRENT_SOURCE_DIR}/include/dshot"
             >
         $<INSTALL_INTERFACE:"include/dshot">  # <prefix>/include/mylib
+)
+
+target_include_directories(icp10101 PUBLIC
+        $<BUILD_INTERFACE:
+            # icp10101
+			"${CMAKE_CURRENT_SOURCE_DIR}/include/icp10101"
+            >
+        $<INSTALL_INTERFACE:"include/icp10101">  # <prefix>/include/mylib
 )
 
 target_include_directories(icm20948 PUBLIC

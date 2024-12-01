@@ -13,8 +13,8 @@
     {
       "kind": "git",
       "repository": "https://github.com/manisonik/vcpkg-registry",
-      "baseline": "5b14e6542a26001b4ef956f559ac64149ebd0479",
-      "packages": [ "dcel", "scpi" ]
+      "baseline": "f886049e49a437cd3f8ffa29677b234e0839d2a4",
+      "packages": [ "dcel", "scpi", "fusion" ]
     }
   ]
 }

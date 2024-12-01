@@ -18,6 +18,15 @@
         "functional": "cpp",
         "tuple": "cpp",
         "type_traits": "cpp",
-        "utility": "cpp"
+        "utility": "cpp",
+        "sensor_icm20948.h": "c",
+        "device_protocol.h": "c",
+        "tim.h": "c"
+    },
+    "workbench.colorCustomizations": 
+    {
+        "debugConsole.infoForeground": "#ffffff",
+        "debugConsole.errorForeground": "#aa0000",
+        "debugConsole.warningForeground": "#e5ff00"
     }
 }

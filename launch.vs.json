@@ -29,6 +29,10 @@
         {
           "text": "-interpreter-exec console \u0022monitor reset halt\u0022",
           "ignoreFailures": false
+        },
+        {
+          "text": "-interpreter-exec console \u0022monitor arm semihosting enable\u0022",
+          "ignoreFailures": false
         }
       ],
       "svdPath": "${workspaceRoot}/STM32F756.svd"

@@ -33,6 +33,20 @@ extern "C" {
 
 typedef int (*read_reg_t)(void* context, uint8_t reg, uint8_t* buf, uint32_t len);
 typedef int (*write_reg_t)(void* context, uint8_t reg, const uint8_t* buf, uint32_t len);
+typedef void (*log_callback_t)(int level, const char * str, va_list ap);
+typedef int (*delay_us_t)(uint16_t us);
+typedef int (*delay_ms_t)(uint16_t ms);
+
+typedef struct inv_invpres_init
+{
+	void *     context;
+	log_callback_t log;
+	read_reg_t read_callback;
+	write_reg_t write_callback;
+	delay_us_t delay_us;
+	delay_ms_t delay_ms;
+	int is_spi;
+} inv_invpres_init_t;
 
 /* data structure to hold pressure sensor related parameters */
 typedef struct inv_invpres
@@ -46,9 +60,7 @@ typedef struct inv_invpres
 	float LUT_upper;
 	float quadr_factor;
 	float offst_factor;
-	read_reg_t serif_read_reg;
-	write_reg_t serif_write_reg;
-
+	inv_invpres_init_t init;
 } inv_invpres_t;
 
 int inv_invpres_init(struct inv_invpres *s);
