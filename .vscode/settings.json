@@ -21,12 +21,29 @@
         "utility": "cpp",
         "sensor_icm20948.h": "c",
         "device_protocol.h": "c",
-        "tim.h": "c"
+        "tim.h": "c",
+        "icm20948transport.h": "c",
+        "icm20948dataconverter.h": "c",
+        "icm20948_img.dmp3a.h": "c",
+        "invexport.h": "c",
+        "protocol_ibus.h": "c",
+        "usart.h": "c",
+        "stdbool.h": "c",
+        "stdint.h": "c",
+        "stdio.h": "c",
+        "string": "c",
+        "string_view": "c",
+        "main.h": "c",
+        "memory.h": "c",
+        "cstdint": "c"
     },
     "workbench.colorCustomizations": 
     {
         "debugConsole.infoForeground": "#ffffff",
         "debugConsole.errorForeground": "#aa0000",
         "debugConsole.warningForeground": "#e5ff00"
-    }
+    },
+    "cortex-debug.liveWatchRefreshRate": 250,
+    "cortex-debug.variableUseNaturalFormat": true,
+    "cortex-debug.gdbPath": "gdb-multiarch.exe"
 }

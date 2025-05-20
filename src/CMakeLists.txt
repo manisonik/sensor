@@ -24,6 +24,8 @@ set_target_properties(${icp10101_NAME} PROPERTIES PUBLIC_HEADER "${icp10101_publ
 # set the debug post-fix
 set_target_properties(${icp10101_NAME} PROPERTIES DEBUG_POSTFIX "d")
 
+#============================================================================#
+
 # create the shared library (DLL)
 set(icm20948_NAME icm20948)
 add_library(${icm20948_NAME}
@@ -75,6 +77,8 @@ set_target_properties(${icm20948_NAME} PROPERTIES PUBLIC_HEADER "${icm20948_publ
 # set the debug post-fix
 set_target_properties(${icm20948_NAME} PROPERTIES DEBUG_POSTFIX "d")
 
+#============================================================================#
+
 # create the shared library (DLL)
 set(sensor_NAME dshot)
 add_library(${sensor_NAME}
@@ -99,6 +103,37 @@ set_target_properties(${sensor_NAME} PROPERTIES PUBLIC_HEADER "${dshot_public_he
 # set the debug post-fix
 set_target_properties(${sensor_NAME} PROPERTIES DEBUG_POSTFIX "d")
 
+#============================================================================#
+
+# create the shared library (DLL)
+set(ibus_NAME ibus)
+add_library(${ibus_NAME}
+    "protocol_ibus.c"
+
+	# Adding headers so IDEs can see them.
+	"${PROJECT_SOURCE_DIR}/include/ibus/protocol_ibus.h"
+)
+
+target_include_directories(${ibus_NAME} PRIVATE
+	"${PROJECT_SOURCE_DIR}/include/ibus"
+)
+
+# without it public headers won't get installed
+set(ibus_public_headers
+    "${PROJECT_SOURCE_DIR}/include/ibus/protocol_ibus.h"
+)
+
+# note that ${public_headers} has to be in quotes
+set_target_properties(${ibus_NAME} PROPERTIES PUBLIC_HEADER "${ibus_public_headers}")
+
+# set the debug post-fix
+set_target_properties(${ibus_NAME} PROPERTIES DEBUG_POSTFIX "d")
+
+target_compile_definitions(${ibus_NAME} PRIVATE USE_TELEMETRY_IBUS)
+target_compile_definitions(${ibus_NAME} PRIVATE USE_TELEMETRY)
+
+#============================================================================#
+
 file(GLOB HEADER_FILES_SUB "${PROJECT_SOURCE_DIR}/include/dshot/*.h")
 source_group("include" FILES ${HEADER_FILES_SUB})
 
@@ -106,6 +141,9 @@ file(GLOB HEADER_FILES_SUB "${PROJECT_SOURCE_DIR}/include/icm20948/*.h")
 source_group("include" FILES ${HEADER_FILES_SUB})
 
 file(GLOB HEADER_FILES_SUB "${PROJECT_SOURCE_DIR}/include/icp10101/*.h")
+source_group("include" FILES ${HEADER_FILES_SUB})
+
+file(GLOB HEADER_FILES_SUB "${PROJECT_SOURCE_DIR}/include/ibus/*.h")
 source_group("include" FILES ${HEADER_FILES_SUB})
 
 file(GLOB SOURCE_FILES_SUB "${CMAKE_CURRENT_SOURCE_DIR}/*.c")

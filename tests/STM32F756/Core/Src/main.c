@@ -58,6 +58,7 @@ void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
 extern void initialise_monitor_handles(void);
+extern hwtimer_t timHandle;
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -73,7 +74,12 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  initialise_monitor_handles();
+/*#ifdef DEBUG
+#warning "DEBUG uses printf and semihosting!"
+  if(CoreDebug->DHCSR & 0x01)
+    initialise_monitor_handles(); // remove when not semi-hosting
+#endif*/
+  initialise_monitor_handles(); // remove when not semi-hosting
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -98,9 +104,10 @@ int main(void)
   MX_TIM3_Init();
   MX_ETH_Init();
   MX_I2C2_Init();
-  MX_TIM7_Init();
+  MX_USART6_UART_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  initCycleTimer(&timHandle);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -189,7 +196,7 @@ void SystemClock_Config(void)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   /* USER CODE BEGIN Callback 0 */
-
+  timerISR(&timHandle);
   /* USER CODE END Callback 0 */
   if (htim->Instance == TIM6) {
     HAL_IncTick();

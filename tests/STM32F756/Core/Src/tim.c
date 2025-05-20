@@ -21,11 +21,23 @@
 #include "tim.h"
 
 /* USER CODE BEGIN 0 */
+#include "atomic.h"
+#include "nvic.h"
+#include <assert.h>
+#include <string.h>
+
+/*static volatile uint32_t sysTickUptime = 0;
+static volatile uint32_t sysTickValStamp = 0;
+static volatile int sysTickPending = 0;
+static uint32_t cpuClockFrequency = 0;
+static uint32_t usTicks = 0;
+static float usTicksInv = 0.0f;*/
+
+#define DWT_LAR_UNLOCK_VALUE 0xC5ACCE55
 
 /* USER CODE END 0 */
 
 TIM_HandleTypeDef htim3;
-TIM_HandleTypeDef htim7;
 DMA_HandleTypeDef hdma_tim3_ch1_trig;
 DMA_HandleTypeDef hdma_tim3_ch2;
 DMA_HandleTypeDef hdma_tim3_ch3;
@@ -85,39 +97,6 @@ void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 2 */
   HAL_TIM_MspPostInit(&htim3);
-
-}
-/* TIM7 init function */
-void MX_TIM7_Init(void)
-{
-
-  /* USER CODE BEGIN TIM7_Init 0 */
-
-  /* USER CODE END TIM7_Init 0 */
-
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM7_Init 1 */
-  uint32_t gu32_ticks = (HAL_RCC_GetHCLKFreq() / 1000000);
-  /* USER CODE END TIM7_Init 1 */
-  htim7.Instance = TIM7;
-  htim7.Init.Prescaler = gu32_ticks-1;
-  htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim7.Init.Period = 65535;
-  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
-  if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim7, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM7_Init 2 */
-  HAL_TIM_Base_Start(&htim7);
-  /* USER CODE END TIM7_Init 2 */
 
 }
 
@@ -228,22 +207,6 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef* tim_pwmHandle)
   /* USER CODE END TIM3_MspInit 1 */
   }
 }
-
-void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* tim_baseHandle)
-{
-
-  if(tim_baseHandle->Instance==TIM7)
-  {
-  /* USER CODE BEGIN TIM7_MspInit 0 */
-
-  /* USER CODE END TIM7_MspInit 0 */
-    /* TIM7 clock enable */
-    __HAL_RCC_TIM7_CLK_ENABLE();
-  /* USER CODE BEGIN TIM7_MspInit 1 */
-
-  /* USER CODE END TIM7_MspInit 1 */
-  }
-}
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef* timHandle)
 {
 
@@ -315,37 +278,109 @@ void HAL_TIM_PWM_MspDeInit(TIM_HandleTypeDef* tim_pwmHandle)
   }
 }
 
-void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* tim_baseHandle)
-{
-
-  if(tim_baseHandle->Instance==TIM7)
-  {
-  /* USER CODE BEGIN TIM7_MspDeInit 0 */
-
-  /* USER CODE END TIM7_MspDeInit 0 */
-    /* Peripheral clock disable */
-    __HAL_RCC_TIM7_CLK_DISABLE();
-  /* USER CODE BEGIN TIM7_MspDeInit 1 */
-
-  /* USER CODE END TIM7_MspDeInit 1 */
-  }
-}
-
 /* USER CODE BEGIN 1 */
-int delay_us(uint16_t us)
+void initCycleTimer(hwtimer_t* timer)
 {
-    htim7.Instance->CNT = 0;
-    while (htim7.Instance->CNT < us);
-    return 0;
+  memset(timer, 0, sizeof(*timer));
+  timer->cpuClockFrequency = HAL_RCC_GetSysClockFreq();
+  timer->usTicks = timer->cpuClockFrequency / 1000000;
+  timer->usTicksInv = 1e6f / timer->cpuClockFrequency;
 }
 
-int delay_ms(uint16_t ms)
+void timerISR(hwtimer_t* timer)
 {
-  while(ms > 0)
-  {
-    htim7.Instance->CNT = 0;
-    ms--;
-    while (htim7.Instance->CNT < 1000);
-  }
+    ATOMIC_BLOCK(NVIC_BUILD_PRIORITY(0, 1)) {
+        timer->sysTickUptime++;
+        timer->sysTickValStamp = SysTick->VAL;
+        timer->sysTickPending = 0;
+        (void)(SysTick->CTRL);
+    }
+}
+
+__attribute__((section(".ram_code"))) __attribute__((noinline)) uint32_t microsISR(hwtimer_t* timer)
+{
+    register uint32_t ms, pending, cycle_cnt;
+
+    ATOMIC_BLOCK(NVIC_BUILD_PRIORITY(0, 1)) {
+        cycle_cnt = SysTick->VAL;
+
+        if (SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk) {
+            // Update pending.
+            // Record it for multiple calls within the same rollover period
+            // (Will be cleared when serviced).
+            // Note that multiple rollovers are not considered.
+            timer->sysTickPending = 1;
+
+            // Read VAL again to ensure the value is read after the rollover.
+            timer->cycle_cnt = SysTick->VAL;
+        }
+
+        ms = timer->sysTickUptime;
+        pending = timer->sysTickPending;
+    }
+
+    return ((ms + pending) * 1000) + (timer->usTicks * 1000 - cycle_cnt) / timer->usTicks;
+}
+
+uint32_t micros(hwtimer_t* timer)
+{
+    register uint32_t ms, cycle_cnt;
+
+    // Call microsISR() in interrupt and elevated (non-zero) BASEPRI context
+    if ((SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) || (__get_BASEPRI())) {
+        return microsISR(timer);
+    }
+
+    do {
+        ms = timer->sysTickUptime;
+        cycle_cnt = SysTick->VAL;
+    } while (ms != timer->sysTickUptime || cycle_cnt > timer->sysTickValStamp);
+
+    return (ms * 1000) + (timer->usTicks * 1000 - cycle_cnt) / timer->usTicks;
+}
+
+int32_t clockCyclesToMicros(hwtimer_t* timer, int32_t clockCycles)
+{
+    return clockCycles / timer->usTicks;
+}
+
+float clockCyclesToMicrosf(hwtimer_t* timer, int32_t clockCycles)
+{
+    return clockCycles * timer->usTicksInv;
+}
+
+// Note that this conversion is signed as this is used for periods rather than absolute timestamps
+int32_t clockCyclesTo10thMicros(hwtimer_t* timer, int32_t clockCycles)
+{
+    return 10 * clockCycles / (int32_t)timer->usTicks;
+}
+
+// Note that this conversion is signed as this is used for periods rather than absolute timestamps
+int32_t clockCyclesTo100thMicros(hwtimer_t* timer, int32_t clockCycles)
+{
+    return 100 * clockCycles / (int32_t)timer->usTicks;
+}
+
+uint32_t clockMicrosToCycles(hwtimer_t* timer, uint32_t micros)
+{
+    return micros * timer->usTicks;
+}
+
+// Return system uptime in milliseconds (rollover in 49 days)
+uint32_t millis(hwtimer_t* timer)
+{
+    return timer->sysTickUptime;
+}
+
+void delayUs(hwtimer_t* timer, uint32_t us)
+{
+    uint32_t now = micros(timer);
+    while (micros(timer) - now < us);
+}
+
+void delayMs(hwtimer_t* timer, uint32_t ms)
+{
+    while (ms--)
+        delayUs(timer, 1000);
 }
 /* USER CODE END 1 */

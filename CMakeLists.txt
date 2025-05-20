@@ -73,6 +73,14 @@ target_include_directories(icp10101 PUBLIC
         $<INSTALL_INTERFACE:"include/icp10101">  # <prefix>/include/mylib
 )
 
+target_include_directories(ibus PUBLIC
+        $<BUILD_INTERFACE:
+            # ibus
+			"${CMAKE_CURRENT_SOURCE_DIR}/include/ibus"
+            >
+        $<INSTALL_INTERFACE:"include/ibus">  # <prefix>/include/mylib
+)
+
 target_include_directories(icm20948 PUBLIC
         $<BUILD_INTERFACE:
             # icm20948

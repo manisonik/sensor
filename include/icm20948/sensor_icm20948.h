@@ -74,6 +74,7 @@ int inv_invpres_process_data(struct inv_invpres *s,
 		);    
 void calculate_conversion_constants(struct inv_invpres *s, float *p_Pa, float *p_LUT, float *out);
 void initICM20948(inv_invpres_t* s);
+int icm20948_poll_data();
 
 #ifdef __cplusplus
 }

@@ -34,20 +34,35 @@ extern "C" {
 
 extern TIM_HandleTypeDef htim3;
 
-extern TIM_HandleTypeDef htim7;
-
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
 
 void MX_TIM3_Init(void);
-void MX_TIM7_Init(void);
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 /* USER CODE BEGIN Prototypes */
-int delay_us(uint16_t us);
-int delay_ms(uint16_t ms);
+
+typedef struct hwtimer
+{
+  volatile uint32_t sysTickUptime;
+  volatile uint32_t sysTickValStamp;
+  volatile int sysTickPending;
+  uint32_t cpuClockFrequency;
+  uint32_t usTicks;
+  float usTicksInv;
+  /*register*/ volatile uint32_t ms;
+  /*register*/ volatile uint32_t cycle_cnt;
+  /*register*/ volatile uint32_t pending;
+} hwtimer_t;
+
+void initCycleTimer(hwtimer_t* timer);
+void timerISR(hwtimer_t* timer);
+__attribute__((section(".ram_code"))) __attribute__((noinline)) uint32_t microsISR(hwtimer_t* timer);
+uint32_t micros(hwtimer_t* timer);
+void delayUs(hwtimer_t* timer, uint32_t us);
+void delayMs(hwtimer_t* timer, uint32_t ms);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

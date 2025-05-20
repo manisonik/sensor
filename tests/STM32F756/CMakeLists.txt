@@ -20,6 +20,7 @@ add_executable(${stm32F756_ProjectName}
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/system_stm32f7xx.c"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/tim.c"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/usart.c"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/atomic.c"
 
 	# Drivers - STM32F7xx
 	"${CMAKE_CURRENT_SOURCE_DIR}/Drivers/STM32F7xx_HAL_Driver/Src/stm32f7xx_hal_cortex.c"
@@ -138,6 +139,7 @@ target_link_libraries(${stm32F756_ProjectName} PRIVATE xioTechnologies::fusion)
 target_link_libraries(${stm32F756_ProjectName} PRIVATE icm20948)
 target_link_libraries(${stm32F756_ProjectName} PRIVATE dshot)
 target_link_libraries(${stm32F756_ProjectName} PRIVATE icp10101)
+target_link_libraries(${stm32F756_ProjectName} PRIVATE ibus)
 
 # Compiler options
 target_compile_options(${stm32F756_ProjectName} PRIVATE
@@ -176,7 +178,8 @@ target_link_options(${stm32F756_ProjectName} PRIVATE
     -Wl,-Map=${CMAKE_PROJECT_NAME}.map
     -u _printf_float # STDIO float formatting support (remove if not used)
     #--specs=nosys.specs
-	--specs=rdimon.specs -lc -lrdimon
+	#--specs=rdimon.specs -lc -lrdimon
+	-l rdimon --specs=rdimon.specs
     -Wl,--start-group
     -lc
     -lm

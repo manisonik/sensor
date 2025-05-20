@@ -26,6 +26,33 @@
             "svdPath": "${command:vscode-embedded.set.svd}/STM32U5xx.svd"
         },
         {
+          "name": "Cortex-Debug OpenOCD Debugger",
+          "executable": "${command:cmake.launchTargetPath}",
+          "type": "cortex-debug",
+          "servertype": "openocd",
+          "request": "launch",
+          "cwd": "${workspaceRoot}",
+          "interface": "swd",
+          "device": "STM32F756",
+          "svdFile": "${workspaceRoot}/STM32F756.svd",
+          "showDevDebugOutput": "none",
+          "rtos": "FreeRTOS",
+          "liveWatch": {
+            "enabled": true,
+            "samplesPerSecond": 4
+          },
+          "configFiles": [
+            "board/st_nucleo_f7.cfg"
+          ],
+          "preLaunchCommands": [
+            "set mem inaccessible-by-default off",
+            "monitor reset",
+          ],
+          "postLaunchCommands": [
+            "monitor arm semihosting enable"
+          ]
+        },
+        {
             "name": "Launch OpenOCD Debugger",
             "type": "cppdbg",
             "request": "launch",

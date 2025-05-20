@@ -19,8 +19,9 @@ inv_icm20948_t icm_device;
 inv_invpres_t* icm;
 static const uint8_t EXPECTED_WHOAMI[] = { 0xEA }; /* WHOAMI value for ICM20948 or derivative */
 static int unscaled_bias[THREE_AXES * 2];
-static const uint8_t dmp3_image[] =
-{ "icm20948_img.dmp3a.h" };
+static const uint8_t dmp3_image[] = { 
+	#include "icm20948_img.dmp3a.h"
+};
 
 /* FSR configurations */
 int32_t cfg_acc_fsr = 4; // Default = +/- 4g. Valid ranges: 2, 4, 8, 16
@@ -82,6 +83,10 @@ void inv_icm20948_sleep_us(int us) {
 	if (icm->init.delay_us != NULL) {
 		icm->init.delay_us(us);
 	}
+}
+
+uint64_t inv_icm20948_get_time_us(void) {
+	return 0;
 }
 
 int load_dmp3(void) {
@@ -156,9 +161,45 @@ int icm20948_sensor_setup(void) {
 	INV_MSG(INV_MSG_LEVEL_VERBOSE, "ICM20948 initialized.");
 
 	/* running self-test */
-	icm20948_run_selftest();
+	rc = icm20948_run_selftest();
+
+	/* enable sensor */
+	rc = inv_icm20948_enable_sensor(&icm_device, INV_ICM20948_SENSOR_ACCELEROMETER, 1);
+	rc = inv_icm20948_enable_sensor(&icm_device, INV_ICM20948_SENSOR_GYROSCOPE, 1);
 
 	return rc;
+}
+
+void build_sensor_event_data(void * context, uint8_t sensortype, uint64_t timestamp, const void * data, const void *arg)
+{
+	switch (sensortype)
+	{
+		case INV_ICM20948_SENSOR_ACCELEROMETER:
+		{
+			float raw_bias_data[3];
+			memcpy(raw_bias_data, data, sizeof(raw_bias_data));
+			INV_MSG(INV_MSG_LEVEL_VERBOSE, "ACC (g): x=%f, y=%f, z=%f", raw_bias_data[0], raw_bias_data[1], raw_bias_data[2]);
+		}
+		break;
+		case INV_ICM20948_SENSOR_GYROSCOPE:
+		{
+			float raw_bias_data[3];
+			memcpy(raw_bias_data, data, sizeof(raw_bias_data));
+			INV_MSG(INV_MSG_LEVEL_VERBOSE, "GYR (dps): x=%f, y=%f, z=%f", raw_bias_data[0], raw_bias_data[1], raw_bias_data[2]);
+		}
+		break;
+	}
+}
+
+/// @brief 
+int icm20948_poll_data()
+{
+	int result = 0;
+	
+	/* poll data */
+	result = inv_icm20948_poll_sensor(&icm_device, (void *)0, build_sensor_event_data);
+
+	return result;
 }
 
 void inv_icm20948_get_st_bias(struct inv_icm20948 * s, int *gyro_bias, int *accel_bias, int * st_bias, int * unscaled) {
